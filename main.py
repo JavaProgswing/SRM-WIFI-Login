@@ -136,7 +136,7 @@ async def login(*, retry_count=1):
             WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
             )
-            print("Already logged in, skipping login.")
+            log_message("Already logged in, skipping login.")
             return
         except TimeoutException:
             pass
@@ -256,7 +256,6 @@ def save_credentials(username, password):
             yaml.safe_dump(config_data, f)
 
     except Exception as e:
-        print(e)
         show_alert("Error", f"Failed to save credentials: {str(e)}")
 
 
@@ -372,12 +371,21 @@ def start_app():
     Thread(target=start_loop, daemon=True).start()
 
 
+def run_async_coro(coro):
+    def wrapper(icon, item):
+        asyncio.run(coro())
+
+    return wrapper
+
+
 if __name__ == "__main__":
     icon = Icon(
         "Login App",
         create_image_from_file(),
         menu=Menu(
-            MenuItem("Show Logs", show_logs), MenuItem("Quit", lambda: icon.stop())
+            MenuItem("Show Logs", show_logs),
+            MenuItem("Login Wi-Fi", run_async_coro(login)),
+            MenuItem("Quit", lambda: icon.stop()),
         ),
     )
 
