@@ -39,9 +39,6 @@ def show_alert(title, message):
 config = None
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
-options.binary_location = (
-    "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
-)
 options.add_argument("--headless=new")
 driver = Chrome(
     profile,
