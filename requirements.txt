@@ -1,0 +1,7 @@
+aiohttp
+selenium-profiles
+selenium
+pystray
+pillow
+PyYAML
+pywin32

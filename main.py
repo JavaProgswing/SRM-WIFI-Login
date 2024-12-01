@@ -1,0 +1,388 @@
+from threading import Thread
+import asyncio
+import time
+import os
+import base64
+import sys
+from pathlib import Path
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+from tkinter.scrolledtext import ScrolledText
+
+import aiohttp
+from selenium_profiles.webdriver import Chrome
+from selenium_profiles.profiles import profiles
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    ElementNotInteractableException,
+)
+from selenium import webdriver
+from pystray import Icon, MenuItem, Menu
+from PIL import Image
+import yaml
+import win32com.client
+import pythoncom
+
+
+def show_alert(title, message):
+    """Display an alert message box with a title and message."""
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror(title, message)
+    root.destroy()
+
+
+config = None
+profile = profiles.Windows()
+options = webdriver.ChromeOptions()
+options.binary_location = (
+    "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+)
+options.add_argument("--headless=new")
+driver = Chrome(
+    profile,
+    options=options,
+    uc_driver=False,
+)
+
+log_text = []
+
+
+def log_message(message):
+    """Append log messages to the log text."""
+    log_text.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}")
+
+
+def create_image_from_file():
+    """Load the tray icon from a 'logo.png' file in the current directory."""
+    logo_path = os.path.join(os.getcwd(), "resources", "logo.png")
+    if os.path.exists(logo_path):
+        return Image.open(logo_path)
+    else:
+        raise FileNotFoundError(f"Logo file not found: {logo_path}")
+
+
+async def fetch_url(session, url, timeout):
+    try:
+        async with session.get(url, timeout=timeout) as response:
+            return url, response.status
+    except asyncio.TimeoutError:
+        return url, None
+    except Exception:
+        return url, None
+
+
+async def get_faster_url(urls, timeout=5):
+    async with aiohttp.ClientSession() as session:
+        tasks = [asyncio.create_task(fetch_url(session, url, timeout)) for url in urls]
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+            url, status = task.result()
+            if status == 200:
+                return url
+            elif status == 401:
+                return None
+
+        return None
+
+
+async def get_login_url():
+    start_time = int(time.time())
+    url = await get_faster_url(
+        [
+            "https://iac.srmist.edu.in/Connect/PortalMain",
+            "https://iach.srmist.edu.in/Connect/PortalMain",
+        ]
+    )
+    if url:
+        log_message(f"Login found: '{url}' took {int(time.time()) - start_time}s.")
+    else:
+        log_message(
+            f"No valid login found, Time taken: {int(time.time()) - start_time}s."
+        )
+    return url
+
+
+def seconds_to_hms(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{int(hours):02}:{int(minutes):02}:{int(secs):02}"
+
+
+async def run_every_n_hours(interval_hours):
+    interval_seconds = interval_hours * 3600
+    while True:
+        start_time = time.time()
+        await login()
+        elapsed_time = time.time() - start_time
+        sleep_time = max(1, interval_seconds - elapsed_time)
+        log_message(
+            f"Performing login task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
+        )
+        await asyncio.sleep(sleep_time)
+
+
+async def login(*, retry_count=1):
+    global config
+    if retry_count > 5:
+        log_message("Retry counts exceeded, exiting...")
+        return
+    preferred_url = await get_login_url()
+    if preferred_url:
+        try:
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
+            )
+            print("Already logged in, skipping login.")
+            return
+        except TimeoutException:
+            pass
+        driver.get(preferred_url)
+        try:
+            username_div = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.ID, "LoginUserPassword_auth_username")
+                )
+            )
+            password_div = driver.find_element(By.ID, "LoginUserPassword_auth_password")
+            username_div.send_keys(config["credentials"]["username"])
+            try:
+                password_div.send_keys(
+                    base64.b64decode(config["credentials"]["password"]).decode("utf-8")
+                )
+            except UnicodeDecodeError:
+                log_message("Invalid base64 credentials, skipping login...")
+                show_alert(
+                    "Warning!", "Invalid base64 credentials, unsuccessful login!"
+                )
+                return
+            login_button = driver.find_element(By.ID, "UserCheck_Login_Button")
+            login_button.click()
+            try:
+                login_check = driver.find_element(By.ID, "usercheck_title_div")
+                original_text = login_check.text
+                WebDriverWait(driver, 2).until(
+                    lambda driver: driver.find_element(
+                        By.ID, "usercheck_title_div"
+                    ).text
+                    != original_text
+                )
+            except TimeoutException:
+                log_message("Invalid credentials, skipping login...")
+                show_alert("Warning!", "Invalid login credentials, unsuccessful login!")
+                username, password = ask_for_refreshed_credentials()
+                if username and password:
+                    save_credentials(username, password)
+                    config = yaml.safe_load(open("config.yml"))
+                else:
+                    login(retry_count=retry_count + 1)
+            log_message("Successfully logged into the login page.")
+        except TimeoutException:
+            log_message("Login page took too long to load, retrying login.")
+            await asyncio.sleep(1)
+            await login(retry_count=retry_count + 1)
+        except NoSuchElementException as e:
+            log_message("Invalid state, no such elements found. Retrying...")
+            log_message(e.stacktrace)
+            await asyncio.sleep(1)
+            await login(retry_count=retry_count + 1)
+        except ElementNotInteractableException as e:
+            log_message("Invalid state, elements aren't interactable. Retrying...")
+            log_message(e.stacktrace)
+            await asyncio.sleep(1)
+            await login(retry_count=retry_count + 1)
+        except KeyError:
+            show_alert(
+                "Error!",
+                "Invalid config.yml(must contain username, password), exiting...",
+            )
+            sys.exit(-1)
+
+
+def show_logs():
+    """Display logs in a separate window."""
+    if hasattr(show_logs, "log_window") and show_logs.log_window:
+        try:
+            if show_logs.log_window.winfo_exists():
+                show_logs.log_window.lift()
+                return
+        except tk.TclError:
+            show_logs.log_window = None
+
+    root = tk.Tk()
+    root.title("Logs")
+    root.geometry("600x400")
+    root.attributes("-topmost", True)
+    root.after(0, lambda: root.focus_force())
+
+    show_logs.log_window = root
+
+    text_widget = ScrolledText(root, wrap=tk.WORD, height=20, width=60)
+    text_widget.pack(expand=True, fill=tk.BOTH)
+
+    for log in log_text:
+        text_widget.insert(tk.END, log + "\n")
+    text_widget.configure(state=tk.DISABLED)
+
+    def on_close():
+        show_logs.log_window = None
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+
+    root.mainloop()
+
+
+def save_credentials(username, password):
+    """Save username and password to config.yml."""
+    try:
+        config_data = {}
+        try:
+            with open("config.yml", "r") as f:
+                config_data = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            pass
+
+        config_data["credentials"] = {
+            "username": username,
+            "password": base64.b64encode(password.encode("utf-8")).decode("utf-8"),
+        }
+
+        config_data["interval_hours"] = 6
+        with open("config.yml", "w") as f:
+            yaml.safe_dump(config_data, f)
+
+    except Exception as e:
+        print(e)
+        show_alert("Error", f"Failed to save credentials: {str(e)}")
+
+
+def show_message(title, message):
+    """Display an message box with a title and message."""
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo(title, message)
+    root.destroy()
+
+
+def ask_for_credentials():
+    """Ask the user for username and password."""
+    root = tk.Tk()
+    root.withdraw()
+    show_message("Setup", "Detected first startup, continue to enter your credentials.")
+    username = simpledialog.askstring("Login", "Enter your username:")
+    if username is None:
+        show_alert("Error", "Username is required.")
+        return None, None
+
+    password = simpledialog.askstring("Login", "Enter your password:", show="*")
+    if password is None:
+        show_alert("Error", "Password is required.")
+        return None, None
+
+    return username, password
+
+
+def ask_for_refreshed_credentials():
+    """Ask the user for username and password."""
+    root = tk.Tk()
+    root.withdraw()
+    username = simpledialog.askstring("Login", "Enter your username:")
+    if username is None:
+        show_alert("Error", "Username is required.")
+        return None, None
+
+    password = simpledialog.askstring("Login", "Enter your password:", show="*")
+    if password is None:
+        show_alert("Error", "Password is required.")
+        return None, None
+
+    return username, password
+
+
+def save_autostart_shortcut():
+    pythoncom.CoInitialize()
+    current_file = Path(__file__).resolve()
+    startup_folder = (
+        os.getenv("APPDATA") + r"\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+    )
+
+    shortcut_path = os.path.join(startup_folder, "SRMAutoLogin.lnk")
+    if not os.path.exists(shortcut_path):
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shortcut = shell.CreateShortCut(shortcut_path)
+
+        pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+        shortcut.TargetPath = pythonw_path
+        shortcut.Arguments = str(current_file)
+
+        shortcut.WorkingDirectory = str(current_file.parent)
+        shortcut.Description = "SRM WI-FI autologin software."
+        shortcut.save()
+    pythoncom.CoUninitialize()
+
+
+def start_loop():
+    global config
+    try:
+        config = yaml.safe_load(open("config.yml"))
+    except FileNotFoundError:
+        log_message("No username and password found in config, asking user...")
+        username, password = ask_for_credentials()
+        if username and password:
+            save_credentials(username, password)
+            config = yaml.safe_load(open("config.yml"))
+        else:
+            sys.exit(-1)
+            return
+    try:
+        n_hours = int(config["interval_hours"])
+    except ValueError:
+        show_alert(
+            "Warning!", "Invalid interval_hours found in config, must be an int."
+        )
+        log_message("Invalid interval_hours found in config, defaulting to 6 hours.")
+        n_hours = 6
+    except KeyError:
+        log_message("No interval_hours found in config, defaulting to 6 hours.")
+        n_hours = 6
+
+    try:
+        config["credentials"]["username"]
+        config["credentials"]["password"]
+    except KeyError:
+        log_message("No username and password found in config, asking user...")
+        username, password = ask_for_credentials()
+        if username and password:
+            save_credentials(username, password)
+            config = yaml.safe_load(open("config.yml"))
+        else:
+            sys.exit(-1)
+            return
+
+    save_autostart_shortcut()
+    asyncio.run(run_every_n_hours(n_hours))
+
+
+def start_app():
+    """Start the asyncio loop."""
+    Thread(target=start_loop, daemon=True).start()
+
+
+if __name__ == "__main__":
+    icon = Icon(
+        "Login App",
+        create_image_from_file(),
+        menu=Menu(
+            MenuItem("Show Logs", show_logs), MenuItem("Quit", lambda: icon.stop())
+        ),
+    )
+
+    start_app()
+    icon.run()
