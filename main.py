@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
+import threading
 
 import aiohttp
 from selenium_profiles.webdriver import Chrome
@@ -147,7 +148,6 @@ async def login(*, retry_count=1):
                 EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
             )
             log_message("Already logged in, skipping login.")
-            login_status = LogStatus.LOGIN_SUCCESS
             return
         except TimeoutException:
             pass
@@ -183,6 +183,7 @@ async def login(*, retry_count=1):
                     != original_text
                 )
                 login_status = LogStatus.LOGIN_SUCCESS
+                update_menu(icon)
                 log_message("Successfully logged into the login page.")
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
@@ -222,8 +223,34 @@ async def login(*, retry_count=1):
         login_status = LogStatus.LOGIN_FAILED
 
 
+async def logout():
+    """Perform logout operation."""
+    global login_status
+    try:
+        preferred_url = await get_login_url()
+        if preferred_url:
+            driver.get(preferred_url)
+            if login_status != LogStatus.LOGIN_SUCCESS:
+                show_alert("Warning!", "Not logged in, skipping logout.")
+                log_message("Already logged out, skipping logout.")
+                return
+            logout_button = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
+            )
+            logout_button.click()
+            log_message("Successfully logged out.")
+            login_status = LogStatus.NOT_LOGGED_IN
+            update_menu(icon)
+    except TimeoutException:
+        show_alert("Error!", "Error occured while trying to logout, try again later.")
+        log_message(
+            "Invalid state, logout button not found while status is LOGIN_SUCCESS."
+        )
+        login_status = LogStatus.NOT_LOGGED_IN
+
+
 def show_logs():
-    """Display logs in a separate window."""
+    """Display logs in a separate window and auto-update if new logs are added."""
     if hasattr(show_logs, "log_window") and show_logs.log_window:
         try:
             if show_logs.log_window.winfo_exists():
@@ -243,16 +270,34 @@ def show_logs():
     text_widget = ScrolledText(root, wrap=tk.WORD, height=20, width=60)
     text_widget.pack(expand=True, fill=tk.BOTH)
 
+    displayed_logs = [len(log_text)]
+
+    def update_logs():
+        """Update the log window with new entries if available."""
+        if len(log_text) > displayed_logs[0]:
+            new_logs = log_text[displayed_logs[0] :]
+            for log in new_logs:
+                text_widget.configure(state=tk.NORMAL)
+                text_widget.insert(tk.END, log + "\n")
+                text_widget.configure(state=tk.DISABLED)
+
+            displayed_logs[0] = len(log_text)
+            text_widget.see(tk.END)
+
+        root.after(500, update_logs)
+
+    text_widget.configure(state=tk.NORMAL)
     for log in log_text:
         text_widget.insert(tk.END, log + "\n")
     text_widget.configure(state=tk.DISABLED)
+
+    update_logs()
 
     def on_close():
         show_logs.log_window = None
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
-
     root.mainloop()
 
 
@@ -398,21 +443,34 @@ def run_async_coro(coro):
 
 
 def update_login_status(icon):
-    """Update and display the login status as a message box."""
-    show_message("Status", login_status.value)
+    threading.Thread(target=lambda: show_message("Status", login_status.value)).start()
+
+
+def update_menu(icon):
+    """Update the tray menu dynamically based on login status."""
+    if login_status == LogStatus.LOGIN_SUCCESS:
+        icon.menu = Menu(
+            MenuItem("Show Logs", show_logs),
+            MenuItem("Show Status", update_login_status),
+            MenuItem("Logout Wi-Fi", run_async_coro(logout)),
+            MenuItem("Quit", lambda: icon.stop()),
+        )
+    else:
+        icon.menu = Menu(
+            MenuItem("Show Logs", show_logs),
+            MenuItem("Show Status", update_login_status),
+            MenuItem("Login Wi-Fi", run_async_coro(login)),
+            MenuItem("Quit", lambda: icon.stop()),
+        )
+    icon.update_menu()
 
 
 if __name__ == "__main__":
     icon = Icon(
         "Login App",
         create_image_from_file(),
-        menu=Menu(
-            MenuItem("Show Logs", show_logs),
-            MenuItem("Show Status", update_login_status),
-            MenuItem("Login Wi-Fi", run_async_coro(login)),
-            MenuItem("Quit", lambda: icon.stop()),
-        ),
     )
+    update_menu(icon)
 
     start_app()
     icon.run()
