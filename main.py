@@ -330,17 +330,16 @@ def save_autostart_shortcut():
     )
 
     shortcut_path = os.path.join(startup_folder, "SRMAutoLogin.lnk")
-    if not os.path.exists(shortcut_path):
-        shell = win32com.client.Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortCut(shortcut_path)
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shortcut = shell.CreateShortCut(shortcut_path)
 
-        pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
-        shortcut.TargetPath = pythonw_path
-        shortcut.Arguments = str(current_file)
+    pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+    shortcut.TargetPath = pythonw_path
+    shortcut.Arguments = str(current_file)
 
-        shortcut.WorkingDirectory = str(current_file.parent)
-        shortcut.Description = "SRM WI-FI autologin software."
-        shortcut.save()
+    shortcut.WorkingDirectory = str(current_file.parent)
+    shortcut.Description = "SRM WI-FI autologin software."
+    shortcut.save()
     pythoncom.CoUninitialize()
 
 
