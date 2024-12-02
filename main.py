@@ -8,6 +8,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 from tkinter.scrolledtext import ScrolledText
+from enum import Enum
 
 import aiohttp
 from selenium_profiles.webdriver import Chrome
@@ -36,6 +37,12 @@ def show_alert(title, message):
     root.destroy()
 
 
+class LogStatus(Enum):
+    NOT_LOGGED_IN = "Not Logged in."
+    LOGIN_FAILED = "Login failed."
+    LOGIN_SUCCESS = "Login successful."
+
+
 config = None
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
@@ -45,6 +52,8 @@ driver = Chrome(
     options=options,
     uc_driver=False,
 )
+
+login_status = LogStatus.NOT_LOGGED_IN
 
 log_text = []
 
@@ -100,7 +109,7 @@ async def get_login_url():
         log_message(f"Login found: '{url}' took {int(time.time()) - start_time}s.")
     else:
         log_message(
-            f"No valid login found, Time taken: {int(time.time()) - start_time}s."
+            f"Not connected to SRMIST Wi-fi, Time taken: {int(time.time()) - start_time}s."
         )
     return url
 
@@ -126,9 +135,10 @@ async def run_every_n_hours(interval_hours):
 
 
 async def login(*, retry_count=1):
-    global config
+    global config, login_status
     if retry_count > 5:
         log_message("Retry counts exceeded, exiting...")
+        login_status = LogStatus.LOGIN_FAILED
         return
     preferred_url = await get_login_url()
     if preferred_url:
@@ -137,6 +147,7 @@ async def login(*, retry_count=1):
                 EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
             )
             log_message("Already logged in, skipping login.")
+            login_status = LogStatus.LOGIN_SUCCESS
             return
         except TimeoutException:
             pass
@@ -158,6 +169,7 @@ async def login(*, retry_count=1):
                 show_alert(
                     "Warning!", "Invalid base64 credentials, unsuccessful login!"
                 )
+                login_status = LogStatus.LOGIN_FAILED
                 return
             login_button = driver.find_element(By.ID, "UserCheck_Login_Button")
             login_button.click()
@@ -170,36 +182,44 @@ async def login(*, retry_count=1):
                     ).text
                     != original_text
                 )
+                login_status = LogStatus.LOGIN_SUCCESS
+                log_message("Successfully logged into the login page.")
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
                 show_alert("Warning!", "Invalid login credentials, unsuccessful login!")
+                login_status = LogStatus.LOGIN_FAILED
                 username, password = ask_for_refreshed_credentials()
                 if username and password:
                     save_credentials(username, password)
                     config = yaml.safe_load(open("config.yml"))
                 else:
-                    login(retry_count=retry_count + 1)
-            log_message("Successfully logged into the login page.")
+                    await login(retry_count=retry_count + 1)
         except TimeoutException:
             log_message("Login page took too long to load, retrying login.")
+            login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
         except NoSuchElementException as e:
             log_message("Invalid state, no such elements found. Retrying...")
             log_message(e.stacktrace)
+            login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
         except ElementNotInteractableException as e:
             log_message("Invalid state, elements aren't interactable. Retrying...")
             log_message(e.stacktrace)
+            login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
         except KeyError:
             show_alert(
                 "Error!",
-                "Invalid config.yml(must contain username, password), exiting...",
+                "Invalid config.yml (must contain username, password), exiting...",
             )
+            login_status = LogStatus.LOGIN_FAILED
             sys.exit(-1)
+    else:
+        login_status = LogStatus.LOGIN_FAILED
 
 
 def show_logs():
@@ -378,12 +398,18 @@ def run_async_coro(coro):
     return wrapper
 
 
+def update_login_status(icon):
+    """Update and display the login status as a message box."""
+    show_message("Status", login_status.value)
+
+
 if __name__ == "__main__":
     icon = Icon(
         "Login App",
         create_image_from_file(),
         menu=Menu(
             MenuItem("Show Logs", show_logs),
+            MenuItem("Show Status", update_login_status),
             MenuItem("Login Wi-Fi", run_async_coro(login)),
             MenuItem("Quit", lambda: icon.stop()),
         ),
