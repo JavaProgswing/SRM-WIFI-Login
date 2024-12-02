@@ -9,7 +9,6 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
-import threading
 
 import aiohttp
 from selenium_profiles.webdriver import Chrome
@@ -443,7 +442,7 @@ def run_async_coro(coro):
 
 
 def update_login_status(icon):
-    threading.Thread(target=lambda: show_message("Status", login_status.value)).start()
+    show_message("Status", login_status.value)
 
 
 def update_menu(icon):
