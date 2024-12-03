@@ -126,12 +126,13 @@ async def run_every_n_mins(interval_mins):
     interval_seconds = interval_mins * 60
     while True:
         start_time = time.time()
-        await login()
+        status = await login()
+        if status:
+            log_message(
+                f"Performing login task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
+            )
         elapsed_time = time.time() - start_time
         sleep_time = max(1, interval_seconds - elapsed_time)
-        log_message(
-            f"Performing login task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
-        )
         await asyncio.sleep(sleep_time)
 
 
@@ -184,6 +185,7 @@ async def login(*, retry_count=1):
                 login_status = LogStatus.LOGIN_SUCCESS
                 update_menu(icon)
                 log_message("Successfully logged into the login page.")
+                return True
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
                 show_alert("Warning!", "Invalid login credentials, unsuccessful login!")
