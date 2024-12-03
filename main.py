@@ -150,14 +150,6 @@ async def login(*, retry_count=1):
         return
     previous_login_url = preferred_url
     if preferred_url:
-        try:
-            WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
-            )
-            log_message("Already logged in, skipping login.")
-            return
-        except TimeoutException:
-            pass
         driver.get(preferred_url)
         try:
             username_div = WebDriverWait(driver, 5).until(
@@ -207,15 +199,13 @@ async def login(*, retry_count=1):
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
-        except NoSuchElementException as e:
+        except NoSuchElementException:
             log_message("Invalid state, no such elements found. Retrying...")
-            log_message(e.stacktrace)
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
-        except ElementNotInteractableException as e:
+        except ElementNotInteractableException:
             log_message("Invalid state, elements aren't interactable. Retrying...")
-            log_message(e.stacktrace)
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
