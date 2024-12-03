@@ -315,7 +315,7 @@ def save_credentials(username, password):
             "password": base64.b64encode(password.encode("utf-8")).decode("utf-8"),
         }
 
-        config_data["interval_hours"] = 6
+        config_data["interval_hours"] = 1
         with open("config.yml", "w") as f:
             yaml.safe_dump(config_data, f)
 
