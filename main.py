@@ -44,6 +44,7 @@ class LogStatus(Enum):
 
 
 config = None
+previous_login_url = None
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
 options.add_argument("--headless=new")
@@ -121,8 +122,8 @@ def seconds_to_hms(seconds):
     return f"{int(hours):02}:{int(minutes):02}:{int(secs):02}"
 
 
-async def run_every_n_hours(interval_hours):
-    interval_seconds = interval_hours * 3600
+async def run_every_n_mins(interval_mins):
+    interval_seconds = interval_mins * 60
     while True:
         start_time = time.time()
         await login()
@@ -135,12 +136,15 @@ async def run_every_n_hours(interval_hours):
 
 
 async def login(*, retry_count=1):
-    global config, login_status
+    global config, login_status, previous_login_url
     if retry_count > 5:
         log_message("Retry counts exceeded, exiting...")
         login_status = LogStatus.LOGIN_FAILED
         return
     preferred_url = await get_login_url()
+    if previous_login_url and preferred_url == previous_login_url:
+        return
+    previous_login_url = preferred_url
     if preferred_url:
         try:
             WebDriverWait(driver, 5).until(
@@ -315,7 +319,7 @@ def save_credentials(username, password):
             "password": base64.b64encode(password.encode("utf-8")).decode("utf-8"),
         }
 
-        config_data["interval_hours"] = 1
+        config_data["interval_mins"] = 0.5
         with open("config.yml", "w") as f:
             yaml.safe_dump(config_data, f)
 
@@ -401,16 +405,16 @@ def start_loop():
             sys.exit(-1)
             return
     try:
-        n_hours = int(config["interval_hours"])
+        n_mins = float(config["interval_mins"])
     except ValueError:
         show_alert(
-            "Warning!", "Invalid interval_hours found in config, must be an int."
+            "Warning!", "Invalid interval_mins found in config, must be an int."
         )
-        log_message("Invalid interval_hours found in config, defaulting to 6 hours.")
-        n_hours = 6
+        log_message("Invalid interval_mins found in config, defaulting to 6 hours.")
+        n_mins = 0.5
     except KeyError:
-        log_message("No interval_hours found in config, defaulting to 6 hours.")
-        n_hours = 6
+        log_message("No interval_mins found in config, defaulting to 6 hours.")
+        n_mins = 0.5
 
     try:
         config["credentials"]["username"]
@@ -426,7 +430,7 @@ def start_loop():
             return
 
     save_autostart_shortcut()
-    asyncio.run(run_every_n_hours(n_hours))
+    asyncio.run(run_every_n_mins(n_mins))
 
 
 def start_app():
