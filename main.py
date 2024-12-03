@@ -142,7 +142,11 @@ async def login(*, retry_count=1):
         login_status = LogStatus.LOGIN_FAILED
         return
     preferred_url = await get_login_url()
-    if previous_login_url and preferred_url == previous_login_url:
+    if (
+        previous_login_url
+        and preferred_url == previous_login_url
+        and login_status == LogStatus.LOGIN_SUCCESS
+    ):
         return
     previous_login_url = preferred_url
     if preferred_url:
@@ -407,9 +411,7 @@ def start_loop():
     try:
         n_mins = float(config["interval_mins"])
     except ValueError:
-        show_alert(
-            "Warning!", "Invalid interval_mins found in config, must be an int."
-        )
+        show_alert("Warning!", "Invalid interval_mins found in config, must be an int.")
         log_message("Invalid interval_mins found in config, defaulting to 6 hours.")
         n_mins = 0.5
     except KeyError:
