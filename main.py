@@ -55,7 +55,7 @@ driver = Chrome(
 )
 
 login_status = LogStatus.NOT_LOGGED_IN
-
+last_login_time = 0
 log_text = []
 
 
@@ -137,7 +137,7 @@ async def run_every_n_mins(interval_mins):
 
 
 async def login(*, retry_count=1):
-    global config, login_status, previous_login_url
+    global config, login_status, previous_login_url, last_login_time
     if retry_count > 5:
         log_message("Retry counts exceeded, exiting...")
         login_status = LogStatus.LOGIN_FAILED
@@ -147,6 +147,7 @@ async def login(*, retry_count=1):
         previous_login_url
         and preferred_url == previous_login_url
         and login_status == LogStatus.LOGIN_SUCCESS
+        and int(time.time()) - last_login_time <= (12*60*60)
     ):
         return
     previous_login_url = preferred_url
@@ -183,6 +184,7 @@ async def login(*, retry_count=1):
                     != original_text
                 )
                 login_status = LogStatus.LOGIN_SUCCESS
+                last_login_time = int(time.time())
                 update_menu(icon)
                 log_message("Successfully logged into the login page.")
                 return True
@@ -404,10 +406,10 @@ def start_loop():
         n_mins = float(config["interval_mins"])
     except ValueError:
         show_alert("Warning!", "Invalid interval_mins found in config, must be an int.")
-        log_message("Invalid interval_mins found in config, defaulting to 6 hours.")
+        log_message("Invalid interval_mins found in config, defaulting to 0.5 mins.")
         n_mins = 0.5
     except KeyError:
-        log_message("No interval_mins found in config, defaulting to 6 hours.")
+        log_message("No interval_mins found in config, defaulting to 0.5 mins.")
         n_mins = 0.5
 
     try:
