@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
+import traceback
 
 import aiohttp
 from selenium_profiles.webdriver import Chrome
@@ -48,6 +49,7 @@ class LogStatus(Enum):
 
 config = None
 previous_login_url = None
+first_run = True
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
 options.add_argument("--headless=new")
@@ -132,8 +134,16 @@ async def run_every_n_mins(interval_mins):
         await asyncio.sleep(sleep_time)
 
 
+def get_traceback(error):
+    etype = type(error)
+    trace = error.__traceback__
+    lines = traceback.format_exception(etype, error, trace)
+    traceback_text = "".join(lines)
+    return traceback_text
+
+
 async def login(*, retry_count=1):
-    global config, login_status, previous_login_url, last_login_time
+    global config, login_status, previous_login_url, last_login_time, first_run
     if retry_count > 5:
         log_message("Retry counts exceeded, exiting...")
         login_status = LogStatus.LOGIN_FAILED
@@ -153,15 +163,17 @@ async def login(*, retry_count=1):
         update_menu(icon)
         driver.get(preferred_url)
         try:
-            logoff_button = WebDriverWait(driver, 1).until(
-                EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
-            )
-            if logoff_button:
+            try:
+                WebDriverWait(driver, 2).until(
+                    EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
+                )
                 last_login_time = int(time.time())
                 previous_login_url = preferred_url
                 login_status = LogStatus.LOGIN_SUCCESS
                 update_menu(icon)
                 return preferred_url
+            except TimeoutException:
+                pass
             username_div = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located(
                     (By.ID, "LoginUserPassword_auth_username")
@@ -173,7 +185,8 @@ async def login(*, retry_count=1):
                 password_div.send_keys(
                     base64.b64decode(config["credentials"]["password"]).decode("utf-8")
                 )
-            except UnicodeDecodeError:
+            except UnicodeDecodeError as e:
+                log_message(get_traceback(e))
                 log_message("Invalid base64 credentials, skipping login...")
                 show_alert(
                     "Warning!", "Invalid base64 credentials, unsuccessful login!"
@@ -195,10 +208,13 @@ async def login(*, retry_count=1):
                 previous_login_url = preferred_url
                 login_status = LogStatus.LOGIN_SUCCESS
                 update_menu(icon)
-                
-                driver.close()
+                if not first_run:
+                    driver.close()
+                first_run = False
+
                 return preferred_url
-            except TimeoutException:
+            except TimeoutException as e:
+                log_message(get_traceback(e))
                 log_message("Invalid credentials, skipping login...")
                 show_alert("Warning!", "Invalid login credentials, unsuccessful login!")
                 login_status = LogStatus.LOGIN_FAILED
@@ -208,22 +224,26 @@ async def login(*, retry_count=1):
                     config = yaml.safe_load(open("config.yml"))
                 else:
                     await login(retry_count=retry_count + 1)
-        except TimeoutException:
+        except TimeoutException as e:
+            log_message(get_traceback(e))
             log_message("Login page took too long to load, retrying login.")
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
-        except NoSuchElementException:
+        except NoSuchElementException as e:
+            log_message(get_traceback(e))
             log_message("Invalid state, no such elements found. Retrying...")
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
-        except ElementNotInteractableException:
+        except ElementNotInteractableException as e:
+            log_message(get_traceback(e))
             log_message("Invalid state, elements aren't interactable. Retrying...")
             login_status = LogStatus.LOGIN_FAILED
             await asyncio.sleep(1)
             await login(retry_count=retry_count + 1)
-        except KeyError:
+        except KeyError as e:
+            log_message(get_traceback(e))
             show_alert(
                 "Error!",
                 "Invalid config.yml (must contain username, password), exiting...",
