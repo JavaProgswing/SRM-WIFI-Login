@@ -127,12 +127,12 @@ async def run_every_n_mins(interval_mins):
     while True:
         start_time = time.time()
         status = await login()
+        elapsed_time = time.time() - start_time
+        sleep_time = max(1, interval_seconds - elapsed_time)
         if status:
             log_message(
                 f"Performing login task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
             )
-        elapsed_time = time.time() - start_time
-        sleep_time = max(1, interval_seconds - elapsed_time)
         await asyncio.sleep(sleep_time)
 
 
@@ -147,7 +147,7 @@ async def login(*, retry_count=1):
         previous_login_url
         and preferred_url == previous_login_url
         and login_status == LogStatus.LOGIN_SUCCESS
-        and int(time.time()) - last_login_time <= (12*60*60)
+        and int(time.time()) - last_login_time <= (12 * 60 * 60)
     ):
         return
     previous_login_url = preferred_url
