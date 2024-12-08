@@ -150,7 +150,6 @@ async def login(*, retry_count=1):
         and int(time.time()) - last_login_time <= (12 * 60 * 60)
     ):
         return
-    previous_login_url = preferred_url
     if preferred_url:
         driver.get(preferred_url)
         try:
@@ -185,6 +184,7 @@ async def login(*, retry_count=1):
                 )
                 login_status = LogStatus.LOGIN_SUCCESS
                 last_login_time = int(time.time())
+                previous_login_url = preferred_url
                 update_menu(icon)
                 log_message("Successfully logged into the login page.")
                 return True
