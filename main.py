@@ -137,7 +137,9 @@ async def login(*, retry_count=1):
     if retry_count > 5:
         log_message("Retry counts exceeded, exiting...")
         login_status = LogStatus.LOGIN_FAILED
+        time.sleep(120)
         return
+
     preferred_url = await get_login_url()
     if (
         previous_login_url
@@ -151,6 +153,15 @@ async def login(*, retry_count=1):
         update_menu(icon)
         driver.get(preferred_url)
         try:
+            logoff_button = WebDriverWait(driver, 1).until(
+                EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
+            )
+            if logoff_button:
+                last_login_time = int(time.time())
+                previous_login_url = preferred_url
+                login_status = LogStatus.LOGIN_SUCCESS
+                update_menu(icon)
+                return preferred_url
             username_div = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located(
                     (By.ID, "LoginUserPassword_auth_username")
@@ -184,6 +195,8 @@ async def login(*, retry_count=1):
                 previous_login_url = preferred_url
                 login_status = LogStatus.LOGIN_SUCCESS
                 update_menu(icon)
+                
+                driver.close()
                 return preferred_url
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
@@ -457,11 +470,20 @@ def update_menu(icon):
             MenuItem("Logout Wi-Fi", run_async_coro(logout)),
             MenuItem("Quit", lambda: icon.stop()),
         )
-    else:
+    elif (
+        login_status == LogStatus.NOT_LOGGED_IN
+        or login_status == LogStatus.LOGIN_FAILED
+    ):
         icon.menu = Menu(
             MenuItem("Show Logs", show_logs),
             MenuItem("Show Status", update_login_status),
             MenuItem("Login Wi-Fi", run_async_coro(login)),
+            MenuItem("Quit", lambda: icon.stop()),
+        )
+    else:
+        icon.menu = Menu(
+            MenuItem("Show Logs", show_logs),
+            MenuItem("Show Status", update_login_status),
             MenuItem("Quit", lambda: icon.stop()),
         )
     icon.update_menu()
