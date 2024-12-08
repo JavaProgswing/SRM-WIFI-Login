@@ -99,19 +99,12 @@ async def get_faster_url(urls, timeout=5):
 
 
 async def get_login_url():
-    start_time = int(time.time())
     url = await get_faster_url(
         [
             "https://iac.srmist.edu.in/Connect/PortalMain",
             "https://iach.srmist.edu.in/Connect/PortalMain",
         ]
     )
-    if url:
-        log_message(f"Login found: '{url}' took {int(time.time()) - start_time}s.")
-    else:
-        log_message(
-            f"Not connected to SRMIST Wi-fi, Time taken: {int(time.time()) - start_time}s."
-        )
     return url
 
 
@@ -131,7 +124,7 @@ async def run_every_n_mins(interval_mins):
         sleep_time = max(1, interval_seconds - elapsed_time)
         if status:
             log_message(
-                f"Performing login task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
+                f"Performing login on {status} task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
             )
         await asyncio.sleep(sleep_time)
 
@@ -149,6 +142,7 @@ async def login(*, retry_count=1):
         and login_status == LogStatus.LOGIN_SUCCESS
         and int(time.time()) - last_login_time <= (12 * 60 * 60)
     ):
+        print("Already logged in with previous-login, skipping login.")
         return
     if preferred_url:
         driver.get(preferred_url)
@@ -187,7 +181,7 @@ async def login(*, retry_count=1):
                 previous_login_url = preferred_url
                 update_menu(icon)
                 log_message("Successfully logged into the login page.")
-                return True
+                return preferred_url
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
                 show_alert("Warning!", "Invalid login credentials, unsuccessful login!")
