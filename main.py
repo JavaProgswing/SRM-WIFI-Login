@@ -124,7 +124,7 @@ async def run_every_n_mins(interval_mins):
         sleep_time = max(1, interval_seconds - elapsed_time)
         if status:
             log_message(
-                f"Performing login on {status} task took: {seconds_to_hms(elapsed_time)}s, next schedule after {seconds_to_hms(sleep_time)}s."
+                f"Performing login on {status} task took {seconds_to_hms(elapsed_time)}s, next login-check after {seconds_to_hms(sleep_time)}s."
             )
         await asyncio.sleep(sleep_time)
 
