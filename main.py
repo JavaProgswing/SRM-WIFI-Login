@@ -38,9 +38,12 @@ def show_alert(title, message):
 
 
 class LogStatus(Enum):
-    NOT_LOGGED_IN = "Not Logged in."
-    LOGIN_FAILED = "Login failed."
-    LOGIN_SUCCESS = "Login successful."
+    NOT_LOGGED_IN = "Not Logged in to SRMIST Portal."
+    LOGIN_WAITING = "Not connected to SRMIST Wi-Fi."
+
+    LOGIN_FAILED = "Login failed in SRMIST Portal."
+    LOGIN_PENDING = "Login pending in SRMIST Portal."
+    LOGIN_SUCCESS = "Login successful in SRMIST Portal."
 
 
 config = None
@@ -142,9 +145,10 @@ async def login(*, retry_count=1):
         and login_status == LogStatus.LOGIN_SUCCESS
         and int(time.time()) - last_login_time <= (12 * 60 * 60)
     ):
-        print("Already logged in with previous-login, skipping login.")
         return
     if preferred_url:
+        login_status = LogStatus.LOGIN_PENDING
+        update_menu(icon)
         driver.get(preferred_url)
         try:
             username_div = WebDriverWait(driver, 5).until(
@@ -176,11 +180,10 @@ async def login(*, retry_count=1):
                     ).text
                     != original_text
                 )
-                login_status = LogStatus.LOGIN_SUCCESS
                 last_login_time = int(time.time())
                 previous_login_url = preferred_url
+                login_status = LogStatus.LOGIN_SUCCESS
                 update_menu(icon)
-                log_message("Successfully logged into the login page.")
                 return preferred_url
             except TimeoutException:
                 log_message("Invalid credentials, skipping login...")
@@ -215,7 +218,13 @@ async def login(*, retry_count=1):
             login_status = LogStatus.LOGIN_FAILED
             sys.exit(-1)
     else:
-        login_status = LogStatus.LOGIN_FAILED
+        if login_status != LogStatus.LOGIN_WAITING:
+            log_message("Not connected to SRMIST Wi-Fi, skipping login attempt.")
+            show_alert(
+                "Warning!", "Not connected to SRMIST Wi-Fi, skipping login attempt."
+            )
+        login_status = LogStatus.LOGIN_WAITING
+        update_menu(icon)
 
 
 async def logout():
