@@ -28,14 +28,19 @@ from PIL import Image
 import yaml
 import win32com.client
 import pythoncom
+import winreg
 
 
 def show_alert(title, message):
     """Display an alert message box with a title and message."""
+    TIME_TO_WAIT = 2000  # in milliseconds
     root = tk.Tk()
     root.withdraw()
-    messagebox.showerror(title, message)
-    root.destroy()
+    try:
+        root.after(TIME_TO_WAIT, root.destroy)
+        messagebox.showerror(title, message, master=root)
+    except tk.TclError:
+        pass
 
 
 class LogStatus(Enum):
@@ -45,6 +50,22 @@ class LogStatus(Enum):
     LOGIN_FAILED = "Login failed in SRMIST Portal."
     LOGIN_PENDING = "Login pending in SRMIST Portal."
     LOGIN_SUCCESS = "Login successful in SRMIST Portal."
+
+
+def is_windows_11():
+    if sys.platform != "win32":
+        return False  # Not a Windows OS
+
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+        )
+        build_number, _ = winreg.QueryValueEx(key, "CurrentBuildNumber")
+        winreg.CloseKey(key)
+
+        return int(build_number) >= 22000
+    except Exception:
+        return False
 
 
 config = None
@@ -58,7 +79,7 @@ driver = Chrome(
     options=options,
     uc_driver=False,
 )
-
+IS_WIN_11 = is_windows_11()
 login_status = LogStatus.NOT_LOGGED_IN
 last_login_time = 0
 log_text = []
@@ -334,6 +355,9 @@ def show_logs():
         show_logs.log_window = None
         root.destroy()
 
+    if IS_WIN_11:
+        root.after(5000, on_close)
+
     root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
 
@@ -363,10 +387,14 @@ def save_credentials(username, password):
 
 def show_message(title, message):
     """Display an message box with a title and message."""
+    TIME_TO_WAIT = 3000  # in milliseconds
     root = tk.Tk()
     root.withdraw()
-    messagebox.showinfo(title, message)
-    root.destroy()
+    try:
+        root.after(TIME_TO_WAIT, root.destroy)
+        messagebox.showinfo(title, message, master=root)
+    except tk.TclError:
+        pass
 
 
 def ask_for_credentials():
