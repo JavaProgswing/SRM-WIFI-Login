@@ -29,7 +29,7 @@ import yaml
 import win32com.client
 import pythoncom
 import winreg
-
+import subprocess
 
 def show_alert(title, message):
     """Display an alert message box with a title and message."""
@@ -67,6 +67,27 @@ def is_windows_11():
     except Exception:
         return False
 
+def install_and_restart():
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'blinker==1.7.0'])
+        print("Successfully installed blinker 1.7.0.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to install blinker 1.7.0: {e}")
+        sys.exit(1)
+
+    try:
+        if sys.argv[0].endswith(".py"):
+            script_name = sys.argv[0]
+        else:
+            script_name = "main.py"
+
+        subprocess.Popen(["pythonw", script_name])
+        print(f"Restarted the script using pythonw {script_name}")
+    except Exception as e:
+        print(f"Failed to restart the script: {e}")
+        sys.exit(1)
+
+    sys.exit(0)
 
 config = None
 previous_login_url = None
@@ -74,11 +95,15 @@ first_run = True
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
 options.add_argument("--headless=new")
-driver = Chrome(
-    profile,
-    options=options,
-    uc_driver=False,
-)
+try:
+    driver = Chrome(
+        profile,
+        options=options,
+        uc_driver=False,
+    )
+except ModuleNotFoundError:
+    install_and_restart()
+
 IS_WIN_11 = is_windows_11()
 login_status = LogStatus.NOT_LOGGED_IN
 last_login_time = 0
