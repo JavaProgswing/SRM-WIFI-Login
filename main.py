@@ -260,13 +260,8 @@ async def login(*, retry_count=1):
             login_button = driver.find_element(By.ID, "UserCheck_Login_Button")
             login_button.click()
             try:
-                login_check = driver.find_element(By.ID, "usercheck_title_div")
-                original_text = login_check.text
-                WebDriverWait(driver, 4).until(
-                    lambda driver: driver.find_element(
-                        By.ID, "usercheck_title_div"
-                    ).text
-                    != original_text
+                WebDriverWait(driver, 3).until(
+                    EC.presence_of_element_located((By.ID, "nac_expiration_time"))
                 )
                 last_login_time = int(time.time())
                 previous_login_url = preferred_url
