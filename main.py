@@ -31,6 +31,7 @@ import pythoncom
 import winreg
 import subprocess
 
+
 def show_alert(title, message):
     """Display an alert message box with a title and message."""
     TIME_TO_WAIT = 2000  # in milliseconds
@@ -67,9 +68,12 @@ def is_windows_11():
     except Exception:
         return False
 
+
 def install_and_restart():
     try:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'blinker==1.7.0'])
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "blinker==1.7.0"]
+        )
         print("Successfully installed blinker 1.7.0.")
     except subprocess.CalledProcessError as e:
         print(f"Failed to install blinker 1.7.0: {e}")
@@ -88,6 +92,7 @@ def install_and_restart():
         sys.exit(1)
 
     sys.exit(0)
+
 
 config = None
 previous_login_url = None
@@ -166,6 +171,9 @@ def seconds_to_hms(seconds):
     return f"{int(hours):02}:{int(minutes):02}:{int(secs):02}"
 
 
+lock = asyncio.Event()
+
+
 async def run_every_n_mins(interval_mins):
     interval_seconds = interval_mins * 60
     while True:
@@ -177,7 +185,17 @@ async def run_every_n_mins(interval_mins):
             log_message(
                 f"Performing login on {status} task took {seconds_to_hms(elapsed_time)}s, next login-check after {seconds_to_hms(sleep_time)}s."
             )
-        await asyncio.sleep(sleep_time)
+
+        try:
+            await asyncio.wait_for(lock.wait(), timeout=sleep_time)
+            lock.clear()
+            log_message("User initiated refresh, performing a login-check.")
+        except asyncio.TimeoutError:
+            pass  # Timeout without interruption; continue normally
+
+
+def refresh_login_status():
+    lock.set()
 
 
 def get_traceback(error):
@@ -557,6 +575,7 @@ def update_menu(icon):
         icon.menu = Menu(
             MenuItem("Show Logs", show_logs),
             MenuItem("Show Status", update_login_status),
+            MenuItem("Refresh Status", refresh_login_status),
             MenuItem("Quit", lambda: icon.stop()),
         )
     icon.update_menu()
