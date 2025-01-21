@@ -262,7 +262,7 @@ async def login(*, retry_count=1):
             try:
                 login_check = driver.find_element(By.ID, "usercheck_title_div")
                 original_text = login_check.text
-                WebDriverWait(driver, 2).until(
+                WebDriverWait(driver, 4).until(
                     lambda driver: driver.find_element(
                         By.ID, "usercheck_title_div"
                     ).text
