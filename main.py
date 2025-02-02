@@ -107,7 +107,7 @@ previous_login_url = None
 first_run = True
 profile = profiles.Windows()
 options = webdriver.ChromeOptions()
-# options.add_argument("--headless=new")
+options.add_argument("--headless=new")
 try:
     driver = Chrome(
         profile,
