@@ -231,13 +231,11 @@ async def login(*, retry_count=1):
                 WebDriverWait(driver, 2).until(
                     EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
                 )
+            except TimeoutException:
                 last_login_time = int(time.time())
                 previous_login_url = preferred_url
                 login_status = LogStatus.LOGIN_SUCCESS
-                update_menu(icon)
                 return preferred_url
-            except TimeoutException:
-                pass
             username_div = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located(
                     (By.ID, "LoginUserPassword_auth_username")
