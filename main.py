@@ -69,16 +69,7 @@ def is_windows_11():
         return False
 
 
-def install_and_restart():
-    try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "blinker==1.7.0"]
-        )
-        print("Successfully installed blinker 1.7.0.")
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to install blinker 1.7.0: {e}")
-        sys.exit(1)
-
+def restart():
     try:
         if sys.argv[0].endswith(".py"):
             script_name = sys.argv[0]
@@ -91,6 +82,23 @@ def install_and_restart():
         print(f"Failed to restart the script: {e}")
         sys.exit(1)
 
+
+def restart_and_exit():
+    restart()
+    sys.exit(0)
+
+
+def install_and_restart():
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "blinker==1.7.0"]
+        )
+        print("Successfully installed blinker 1.7.0.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to install blinker 1.7.0: {e}")
+        sys.exit(1)
+
+    restart()
     sys.exit(0)
 
 
@@ -557,6 +565,7 @@ def update_menu(icon):
             MenuItem("Show Logs", show_logs),
             MenuItem("Show Status", update_login_status),
             MenuItem("Logout Wi-Fi", run_async_coro(logout)),
+            MenuItem("Restart", restart_and_exit),
             MenuItem("Quit", lambda: icon.stop()),
         )
     elif (
@@ -567,6 +576,7 @@ def update_menu(icon):
             MenuItem("Show Logs", show_logs),
             MenuItem("Show Status", update_login_status),
             MenuItem("Login Wi-Fi", run_async_coro(login)),
+            MenuItem("Restart", restart_and_exit),
             MenuItem("Quit", lambda: icon.stop()),
         )
     else:
@@ -574,6 +584,7 @@ def update_menu(icon):
             MenuItem("Show Logs", show_logs),
             MenuItem("Show Status", update_login_status),
             MenuItem("Refresh Status", refresh_login_status),
+            MenuItem("Restart", restart_and_exit),
             MenuItem("Quit", lambda: icon.stop()),
         )
     icon.update_menu()
