@@ -235,6 +235,11 @@ async def login(*, retry_count=1):
                 last_login_time = int(time.time())
                 previous_login_url = preferred_url
                 login_status = LogStatus.LOGIN_SUCCESS
+                update_menu(icon)
+                if not first_run:
+                    driver.close()
+                first_run = False
+
                 return preferred_url
             username_div = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located(
