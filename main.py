@@ -340,6 +340,8 @@ async def logout():
             if login_status != LogStatus.LOGIN_SUCCESS:
                 show_alert("Warning!", "Not logged in, skipping logout.")
                 log_message("Already logged out, skipping logout.")
+                login_status = LogStatus.NOT_LOGGED_IN
+                update_menu(icon)
                 return
             logout_button = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.ID, "UserCheck_Logoff_Button"))
@@ -354,6 +356,7 @@ async def logout():
             "Invalid state, logout button not found while status is LOGIN_SUCCESS."
         )
         login_status = LogStatus.NOT_LOGGED_IN
+        update_menu(icon)
 
 
 def show_logs():
