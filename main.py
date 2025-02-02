@@ -246,6 +246,7 @@ async def login(*, retry_count=1):
                 if not first_run:
                     driver.close()
                 first_run = False
+                log_message("Already logged in, skipping login!")
 
                 return preferred_url
             except TimeoutException:
